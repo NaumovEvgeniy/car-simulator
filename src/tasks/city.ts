@@ -29,7 +29,7 @@ export class City {
 	public async draw(){
 		this.prepareCamera();
 		this.prepareLight();
-		// await this.prepareGround();
+		await this.prepareGround();
 		await this.prepareModel();
 	}
 
@@ -44,7 +44,17 @@ export class City {
 
 	// TODO: нарисовать землю с height map
 	private async prepareGround(){
-		await SceneLoader.AppendAsync('/models/terrain/', 'scene.gltf', this.scene);
+		// await SceneLoader.AppendAsync('/models/terrain/', 'scene.gltf', this.scene);
+		const ground = MeshBuilder.CreateGround('ground', {
+			width: 1000,
+			height: 1000,
+		})
+
+		ground.position.y = -68;
+
+		const material = new StandardMaterial('ground-material', this.scene);
+		material.diffuseColor = Color3.Green();
+		ground.material = material;
 	}
 
 	private async prepareModel(){

@@ -100,7 +100,10 @@ export class Car implements IMoveable, IHavingWheels {
 		const engine = this.scene.getEngine();
 		this.scene.registerBeforeRender(() => {
 			// console.log(this.angleFrequencyWheel, engine.getFps(), this.angleFrequencyWheel / engine.getFps())
-			let angle = this.angleFrequencyWheel / engine.getFps();
+			let fps = engine.getFps();
+			let angle = this.angleFrequencyWheel / fps;
+
+			// крутим колеса
 			this.wheels.forEach((node, type) => {
 				let newAngle = angle;
 				if(type == WheelMap.BackRight || type == WheelMap.FrontRight){
@@ -109,6 +112,10 @@ export class Car implements IMoveable, IHavingWheels {
 
 				node.addRotation(node.rotation.x + newAngle, node.rotation.y, node.rotation.z);
 			});
+
+			// двигаем машину (пока прямо)
+			// console.log('go', this.meterPerSecondSpeed / fps);
+			this.rootNode.position.y -= this.meterPerSecondSpeed;
 		});
 	}
 
@@ -141,26 +148,38 @@ export class Car implements IMoveable, IHavingWheels {
 	}
 
 	private calcSpeed() {
+		// когда машина просто катится
+		const rollDownSpeedDelta = 0.1;
+
+		const stopsSpeedDelta = 0.5;
+
 		this.scene.registerBeforeRender(() => {
 			let currentSpeedValue = this.speed$.value;
+			let isReverse = currentSpeedValue < 0;
+
+			// если нажать клавиша вперед, то увелечиваем скорость
 			if(this.directionMask & MoveActionObserver.Direction.Forward){
 				this.speed$.next(currentSpeedValue + 0.5);
 				return;
 			}
 
-			if(currentSpeedValue > 0) {
-				let v = currentSpeedValue;
-				if(this.directionMask & MoveActionObserver.Direction.Backward){
-					v -= 0.5;
-				}else {
-					v -= 0.1;
-				}
-				if(v < 0){
-					v = 0;
-				}
+			let v = currentSpeedValue;
+			// есжи нажать кнопка назад, сбрасываем скорость или едим назад
+			if(this.directionMask & MoveActionObserver.Direction.Backward){
+				v -= stopsSpeedDelta;
+			}else {
 
-				this.speed$.next(v);
+				// если ичего не зажато, то катимся. если катимся назад, то прибавляем скорость и наоборот
+				isReverse
+					? v += rollDownSpeedDelta
+					: v -= rollDownSpeedDelta;
 			}
+
+			// если скорость меньше дельты, когда она катится, то ставим 0, чтобы не было скорости типо 0.001
+			if(Math.abs(v) < rollDownSpeedDelta){
+				v = 0;
+			}
+			this.speed$.next(v);
 		});
 	}
 
