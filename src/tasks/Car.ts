@@ -1,4 +1,4 @@
-import {Axis, Mesh, Scene, StandardMaterial, TransformNode} from "@babylonjs/core";
+import {ArcRotateCamera, Axis, Mesh, Quaternion, Scene, StandardMaterial, TransformNode} from "@babylonjs/core";
 import {BehaviorSubject} from "rxjs";
 import {IMoveable} from "./IMoveable";
 import {IHavingWheels} from "./IHavingWheels";
@@ -29,6 +29,8 @@ export class Car implements IMoveable, IHavingWheels {
 	private directionMask = MoveActionObserver.Direction.None;
 
 	public readonly speed$ = new BehaviorSubject<number>(0);
+
+	private currentWheelAngle = 0;
 
 	constructor(private rootNode: TransformNode, private scene: Scene) {
 		this.check();
@@ -67,10 +69,20 @@ export class Car implements IMoveable, IHavingWheels {
 	}
 
 	public applyMaterials(){
-		const material = new StandardMaterial('car-material', this.scene);
-		this.rootNode.getChildMeshes().forEach(mesh => {
-			mesh.material = material;
-		})
+		this.rootNode.getChildMeshes().forEach((mesh) => {
+			const matchResult = mesh.id.match(/(Material\.\d+)/);
+			if(matchResult == null){
+				console.warn(`В id меша "${mesh.id}" нет информации о материале`)
+				return;
+			}
+			const materialName = matchResult[1];
+			const material = this.scene.getMaterialByID(materialName);
+			if(material == null){
+				console.warn(`Материала для меша "${mesh.id}" не существует`)
+				return;
+			}
+			mesh.material = null;
+		});
 	}
 
 	private fillIdNodes(){
@@ -116,6 +128,30 @@ export class Car implements IMoveable, IHavingWheels {
 			// двигаем машину (пока прямо)
 			// console.log('go', this.meterPerSecondSpeed / fps);
 			this.rootNode.position.y -= this.meterPerSecondSpeed;
+
+			if(this.scene.activeCamera && this.scene.activeCamera instanceof ArcRotateCamera){
+				this.scene.activeCamera.target.z = 0 - this.rootNode.position.y;
+			}
+
+
+/*
+			// расчитаем угол поворота колеса
+			if(MoveActionObserver.Direction.Left & this.directionMask){
+				this.currentWheelAngle += 0.001;
+			}else if(MoveActionObserver.Direction.Right & this.directionMask){
+				this.currentWheelAngle -= 0.001;
+			}else{
+				let delta = 0.001;
+				if(this.currentWheelAngle > 0){
+					delta = 0 - delta;
+				}
+
+				console.log(delta)
+				this.currentWheelAngle += delta;
+			}
+
+			this.rotateFrontWheels(this.currentWheelAngle);
+*/
 		});
 	}
 
@@ -185,7 +221,21 @@ export class Car implements IMoveable, IHavingWheels {
 
 	private setWheelsDirectly() {
 		this.wheels.forEach((node, type) => {
-			// node.rotate(Axis.Y, 180);
+			let angle = 0;
+			if(type == WheelMap.FrontRight || type == WheelMap.BackRight){
+				angle = Math.PI;
+			}
+			node.rotationQuaternion = Quaternion.RotationAxis(Axis.Y, angle);
 		});
+	}
+
+	private rotateFrontWheels(angle: number) {
+		[WheelMap.FrontRight, WheelMap.FrontLeft].forEach(wheelType => {
+			const wheelNode = this.wheels.get(wheelType);
+			if(wheelNode == null){
+				return;
+			}
+			wheelNode.rotate(Axis.Y, angle);
+		})
 	}
 }

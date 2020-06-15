@@ -2,6 +2,10 @@ import * as BABYLON from "@babylonjs/core";
 import "@babylonjs/inspector";
 import {City} from "./tasks/city";
 
+
+// @ts-ignore
+window.BABYLON = BABYLON;
+
 export function createScene(canvas: HTMLCanvasElement, engine: BABYLON.Engine) {
 	// Create a basic BJS Scene object.
 	let scene = new BABYLON.Scene(engine);
