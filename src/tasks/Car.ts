@@ -1,4 +1,4 @@
-import {ArcRotateCamera, Axis, Mesh, Quaternion, Scene, StandardMaterial, TransformNode} from "@babylonjs/core";
+import {ArcRotateCamera, Axis, Mesh, Quaternion, Scene, Space, TransformNode} from "@babylonjs/core";
 import {BehaviorSubject} from "rxjs";
 import {IMoveable} from "./IMoveable";
 import {IHavingWheels} from "./IHavingWheels";
@@ -12,6 +12,13 @@ enum WheelMap {
 }
 
 export class Car implements IMoveable, IHavingWheels {
+
+	/**
+	 * Текущий угол поворота передних колес
+	 */
+	private currentRotationWheelAngle: number;
+
+	private readonly maxWheelTurnAngle = Math.PI / 4;
 
 	private mapIdNodes = new Map<string, TransformNode>();
 
@@ -36,6 +43,7 @@ export class Car implements IMoveable, IHavingWheels {
 		this.check();
 		this.applyMaterials();
 		this.setWheelsDirectly();
+		this.currentRotationWheelAngle = 0;
 		this.wheelDiameter = this.calcWheelDiameter();
 		this.calcSpeed();
 
@@ -134,7 +142,6 @@ export class Car implements IMoveable, IHavingWheels {
 			}
 
 
-/*
 			// расчитаем угол поворота колеса
 			if(MoveActionObserver.Direction.Left & this.directionMask){
 				this.currentWheelAngle += 0.001;
@@ -146,12 +153,10 @@ export class Car implements IMoveable, IHavingWheels {
 					delta = 0 - delta;
 				}
 
-				console.log(delta)
 				this.currentWheelAngle += delta;
 			}
 
 			this.rotateFrontWheels(this.currentWheelAngle);
-*/
 		});
 	}
 
@@ -230,12 +235,22 @@ export class Car implements IMoveable, IHavingWheels {
 	}
 
 	private rotateFrontWheels(angle: number) {
+		const maxRotation = Math.PI / 6;
+
+		this.currentRotationWheelAngle += angle;
+
+		if(Math.abs(this.currentRotationWheelAngle) > maxRotation){
+			this.currentRotationWheelAngle = angle < 0 ? -maxRotation : maxRotation;
+			return;
+		}
+
 		[WheelMap.FrontRight, WheelMap.FrontLeft].forEach(wheelType => {
 			const wheelNode = this.wheels.get(wheelType);
 			if(wheelNode == null){
 				return;
 			}
-			wheelNode.rotate(Axis.Y, angle);
+
+			wheelNode.rotate(Axis.Y, angle, Space.WORLD);
 		})
 	}
 }
