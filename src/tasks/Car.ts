@@ -1,12 +1,15 @@
 import {
-	AbstractMesh,
 	ArcRotateCamera,
-	Axis, BoundingBox, Color3, Matrix,
+	Axis,
+	BoundingBox,
+	Color3,
+	Matrix,
 	Mesh,
 	MeshBuilder,
 	Quaternion,
 	Scene,
-	Space, StandardMaterial,
+	Space,
+	StandardMaterial,
 	TransformNode,
 	Vector3
 } from "@babylonjs/core";
@@ -49,53 +52,70 @@ export class Car implements IMoveable, IHavingWheels {
 
 	private wheels = new Map<WheelMap, TransformNode>();
 
-	private directionMask = MoveActionObserver.Direction.None;
-
 	public readonly speed$ = new BehaviorSubject<number>(0);
 
-	private currentWheelAngle = 0;
+	private readonly wheelAngle = new BehaviorSubject<number>(0);
 
 	private pivotPosition$: Observable<Vector3>;
 
-	private pivotSphere: AbstractMesh;
+	private directionMask = MoveActionObserver.Direction.None;
 
 	/**
 	 * Размеры машины
 	 */
 	private size: Size;
 
-	constructor(private rootNode: TransformNode, private scene: Scene) {
+	private rootNode: TransformNode;
+
+	constructor(rootNode: TransformNode, private scene: Scene) {
+		this.rootNode = rootNode.getChildTransformNodes(true)[0];
+
+		// проверка всех элементов в моделе
 		this.check();
+
+		// применение материалов для машины
 		this.applyMaterials();
+
+		// ставим колеса ровно
 		this.setWheelsDirectly();
+
+		// расчитываем диаметр колес
 		this.wheelDiameter = this.calcWheelDiameter();
-		this.calcSpeed();
+
+		// обсервер для изменения положения точки врещения
 		this.pivotPosition$ = this.getPivotPosition$();
+
+		// размер машины
 		this.size = this.getCarSize();
 
+		// установка вращения
+		this.setPivot();
+
+		this.calcSpeed();
 
 		GLS.AddAxises(this.rootNode, this.scene, 500);
-		/// для тестов
 
-		this.pivotSphere = MeshBuilder.CreateSphere('pivot-point', {
+		this.go();
+	}
+
+	private setPivot(){
+		let pivotSphere = MeshBuilder.CreateSphere('pivot-point', {
 			diameter: 30,
 		}, this.scene)
 		let pivotMaterial = new StandardMaterial('pivot-material', this.scene);
 		pivotMaterial.diffuseColor = Color3.Red();
-		this.pivotSphere.material = pivotMaterial;
-		this.pivotSphere.parent = this.rootNode;
+		pivotSphere.material = pivotMaterial;
+		pivotSphere.parent = this.rootNode;
 
-		console.log(this.rootNode.position)
 		this.pivotPosition$.subscribe(pos => {
-			this.pivotSphere.position = pos
-			// this.rootNode.setPivotMatrix(Matrix.Translation(-(pos.x), -(pos.y), -(pos.z)))
+			pivotSphere.position = pos
+			this.rootNode.setPivotMatrix(Matrix.Translation(-pos.x, -pos.y, -pos.z))
 		})
-		//
-		// cylinder.position.z = -(this.size.length / 2);
-		// cylinder.position.x = -(this.size.width / 2);
-		// [1,2,3,4,20].forEach((s, i) => setTimeout(() => this.speed$.next(s), i + 1000))
 
-		this.go();
+		let flw = this.wheels.get(WheelMap.FrontLeft);
+		if(flw){
+			GLS.AddAxises(flw, this.scene, 500)
+		}
 	}
 
 	/**
@@ -171,7 +191,7 @@ export class Car implements IMoveable, IHavingWheels {
 	}
 
 	private getSize(boundingBox: BoundingBox): Size {
-		const getSizeByAxle = (key: keyof Vector3) => Math.abs(boundingBox.maximumWorld[key] as number) + Math.abs(boundingBox.minimumWorld[key] as number);
+		const getSizeByAxle = (key: keyof Vector3) => (boundingBox.maximumWorld[key] as number) - (boundingBox.minimumWorld[key] as number);
 		return {
 			length: getSizeByAxle('z'),
 			width: getSizeByAxle('x'),
@@ -180,31 +200,9 @@ export class Car implements IMoveable, IHavingWheels {
 	}
 
 	private go(){
-		//
-		// let cylinder = MeshBuilder.CreateSphere('pivot-point', {
-		// 	diameter: 30,
-		// }, this.scene)
-		// let pivotMaterial = new StandardMaterial('pivot-material', this.scene);
-		// pivotMaterial.diffuseColor = Color3.Red();
-		// cylinder.material = pivotMaterial;
-		// cylinder.parent = this.rootNode;
-		//
-		// cylinder.position.z = -(this.size.length / 2);
-		// cylinder.position.x = -(this.size.width / 2);
-		//
-		// this.rootNode.setPivotMatrix(Matrix.Translation(this.size.width / 2, 0, this.size.length / 2), false)
-		// this.rootNode.setPivotMatrix(Matrix.Translation(this.size.width / 2, 0, this.size.length / 2))
-		// this.rootNode.setPivotMatrix(Matrix.Translation())
-		// this.rootNode.setPivotPoint(new Vector3(-600, -600, -300))
-		// cylinder.position =
-		// end-test
-
 		const engine = this.scene.getEngine();
 		this.scene.registerBeforeRender(() => {
 
-			// this.rootNode.rotate(Axis.Y, 0.005)
-
-			// console.log(this.angleFrequencyWheel, engine.getFps(), this.angleFrequencyWheel / engine.getFps())
 			let fps = engine.getFps();
 			let angleSpeed = this.angleFrequencyWheel / fps;
 
@@ -217,29 +215,26 @@ export class Car implements IMoveable, IHavingWheels {
 
 				node.addRotation(node.rotation.x + newAngleSpeed, node.rotation.y, node.rotation.z);
 			});
+			// умножаем на 100, т.к. одна клетка - сантиметр
+			let deltaSpeed = this.meterPerSecondSpeed * 100 / fps;
+			// this.rootNode.position.z += deltaSpeed;
 
-			// двигаем машину (пока прямо)
-			// console.log('go', this.meterPerSecondSpeed / fps);
-			this.rootNode.position.y -= this.meterPerSecondSpeed;
+			// console.log((Math.PI / 2 - this.currentRotationWheelAngle.value) * deltaSpeed, deltaSpeed);
+
+			let carAngleSpeed = deltaSpeed / this.size.length * this.currentRotationWheelAngle.value;
+
+			if(carAngleSpeed !== 0) {
+				this.rootNode.rotate(Axis.Y, carAngleSpeed, Space.WORLD)
+			}
 
 			if(this.scene.activeCamera && this.scene.activeCamera instanceof ArcRotateCamera){
-				this.scene.activeCamera.target.z = 0 - this.rootNode.position.y;
+				this.scene.activeCamera.target.z = this.rootNode.position.z;
 			}
-
-
-			// расчитаем угол поворота колеса
-			if(MoveActionObserver.Direction.Left & this.directionMask){
-				this.currentWheelAngle += 0.001;
-			}else if(MoveActionObserver.Direction.Right & this.directionMask){
-				this.currentWheelAngle -= 0.001;
-			}
-
-			this.rotateFrontWheels(this.currentWheelAngle);
 		});
 	}
 
 	public getMaxSpeed(): number {
-		return 180;
+		return 50;
 	}
 
 	public getWheelDiameter(): number {
@@ -262,8 +257,8 @@ export class Car implements IMoveable, IHavingWheels {
 		return Math.abs(boundingBoxInfo.maximum.y) + Math.abs(boundingBoxInfo.minimum.y);
 	}
 
-	public setDirectionMask(mask: number): void {
-		this.directionMask = mask;
+	public setDirectionObserver(mask$: Observable<number>): void {
+		mask$.subscribe(value => this.directionMask = value);
 	}
 
 	private calcSpeed() {
@@ -273,33 +268,63 @@ export class Car implements IMoveable, IHavingWheels {
 		const stopsSpeedDelta = 0.5;
 
 		this.scene.registerBeforeRender(() => {
+
 			let currentSpeedValue = this.speed$.value;
 			let isReverse = currentSpeedValue < 0;
 
 			// если нажать клавиша вперед, то увелечиваем скорость
 			if(this.directionMask & MoveActionObserver.Direction.Forward){
 				this.speed$.next(currentSpeedValue + 0.5);
-				return;
+			}else{
+				let v = currentSpeedValue;
+				// есжи нажать кнопка назад, сбрасываем скорость или едим назад
+				if (this.directionMask & MoveActionObserver.Direction.Backward) {
+					v -= stopsSpeedDelta;
+				} else {
+					// если ичего не зажато, то катимся. если катимся назад, то прибавляем скорость и наоборот
+					isReverse
+						? v += rollDownSpeedDelta
+						: v -= rollDownSpeedDelta;
+				}
+
+				// если скорость меньше дельты, когда она катится, то ставим 0, чтобы не было скорости типо 0.001
+				if (Math.abs(v) <= rollDownSpeedDelta) {
+					v = 0;
+				}
+				if (v !== 0 || this.speed$.value !== 0) {
+					this.speed$.next(v);
+				}
 			}
 
-			let v = currentSpeedValue;
-			// есжи нажать кнопка назад, сбрасываем скорость или едим назад
-			if(this.directionMask & MoveActionObserver.Direction.Backward){
-				v -= stopsSpeedDelta;
-			}else {
-
-				// если ичего не зажато, то катимся. если катимся назад, то прибавляем скорость и наоборот
-				isReverse
-					? v += rollDownSpeedDelta
-					: v -= rollDownSpeedDelta;
+			if(this.directionMask & MoveActionObserver.Direction.Right){
+				this.rotateWheelAngle(-0.03);
 			}
-
-			// если скорость меньше дельты, когда она катится, то ставим 0, чтобы не было скорости типо 0.001
-			if(Math.abs(v) < rollDownSpeedDelta){
-				v = 0;
+			if(this.directionMask & MoveActionObserver.Direction.Left){
+				this.rotateWheelAngle(0.03);
 			}
-			this.speed$.next(v);
 		});
+	}
+
+	private rotateWheelAngle(angle: number){
+		const maxAngle = Math.PI / 6;
+		let curAngle = this.currentRotationWheelAngle.value;
+		let newAngle = curAngle + angle;
+		if(Math.abs(newAngle) > maxAngle){
+			newAngle = newAngle < 0 ? -maxAngle : maxAngle;
+		}
+
+		if(curAngle !== newAngle) {
+			this.currentRotationWheelAngle.next(newAngle);
+
+			[WheelMap.FrontRight, WheelMap.FrontLeft].forEach(wheelType => {
+				const wheelNode = this.wheels.get(wheelType);
+				if(wheelNode == null){
+					return;
+				}
+
+				wheelNode.rotate(Axis.Y, angle, Space.WORLD);
+			})
+		}
 	}
 
 	private setWheelsDirectly() {
@@ -312,33 +337,11 @@ export class Car implements IMoveable, IHavingWheels {
 		});
 	}
 
-	private rotateFrontWheels(angle: number) {
-		const maxRotation = Math.PI / 6;
-
-		let newAngle = this.currentRotationWheelAngle.value;
-		newAngle += angle;
-
-		if(Math.abs(newAngle) > maxRotation){
-			newAngle = angle < 0 ? -maxRotation : maxRotation;
-			this.currentRotationWheelAngle.next(newAngle);
-			return;
-		}
-		this.currentRotationWheelAngle.next(newAngle);
-
-		[WheelMap.FrontRight, WheelMap.FrontLeft].forEach(wheelType => {
-			const wheelNode = this.wheels.get(wheelType);
-			if(wheelNode == null){
-				return;
-			}
-
-			wheelNode.rotate(Axis.Y, angle, Space.WORLD);
-		})
-	}
-
 	private getPivotPosition$(): Observable<Vector3> {
 		return new Observable<Vector3>(subscriber => {
 			this.currentRotationWheelAngle.subscribe(angle => {
-				subscriber.next(new Vector3(this.size.length * Math.tan(angle), 0, -(this.size.length / 2)));
+				let x = this.size.length * Math.tan(Math.PI / 2 - angle);
+				subscriber.next(new Vector3(x, 0, -(this.size.length / 2)));
 			})
 		})
 	}

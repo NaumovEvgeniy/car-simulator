@@ -65,7 +65,7 @@ export class City {
 		}
 		const car = new Car(carNode, this.scene);
 		this.car = car;
-		this.moveActionObserver.direction$.subscribe(mask => car.setDirectionMask(mask));
+		car.setDirectionObserver(this.moveActionObserver.direction$)
 		this.prepareSpeedometer(car);
 	}
 
